@@ -30,8 +30,8 @@ public class AuthInterceptor extends HandlerInterceptorAdapter {
         logger.debug("ssoAuthInterceptor, authenticating request using sso credentials");
         verifyHeaders(request);
         Credentials credentials = Credentials.builder()
-                .username(request.getHeader(RequestKeysConstant.CLIENT_ID))
-                .password(request.getHeader(RequestKeysConstant.SSO_USER_ID)).build();
+                .username(request.getHeader(RequestKeysConstant.PASSWORD))
+                .password(request.getHeader(RequestKeysConstant.USERNAME)).build();
         if (!usernameAuthenticator.authenticate(credentials)) {
             logger.debug("ssoAuthInterceptor, unable to authenticate request using sso credentials");
             throw new ExampleException(ErrorCodes.UNAUTHORIZED, "sso credentials provided is invalid");
@@ -44,14 +44,11 @@ public class AuthInterceptor extends HandlerInterceptorAdapter {
     }
 
     private void verifyHeaders(HttpServletRequest request) {
-        if (Objects.isNull(request.getHeader(RequestKeysConstant.AUTHORIZATION))) {
-            throw new ExampleException(ErrorCodes.INVALID_HEADERS, "Authorization header is missing");
+        if (Objects.isNull(request.getHeader(RequestKeysConstant.USERNAME))) {
+            throw new ExampleException(ErrorCodes.INVALID_HEADERS, "username header is missing");
         }
-        if (Objects.isNull(request.getHeader(RequestKeysConstant.SSO_USER_ID))) {
-            throw new ExampleException(ErrorCodes.INVALID_HEADERS, "sso_user_id header is missing");
-        }
-        if (Objects.isNull(request.getHeader(RequestKeysConstant.CLIENT_ID))) {
-            throw new ExampleException(ErrorCodes.INVALID_HEADERS, "client_id header is missing");
+        if (Objects.isNull(request.getHeader(RequestKeysConstant.PASSWORD))) {
+            throw new ExampleException(ErrorCodes.INVALID_HEADERS, "password header is missing");
         }
 
     }
