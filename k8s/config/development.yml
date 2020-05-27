@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spring-boot-scaffold-config
+  namespace: spring-boot-scaffold
+data:
+  SPRING_PROFILES_ACTIVE: dev

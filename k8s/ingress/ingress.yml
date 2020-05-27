@@ -1,0 +1,21 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: spring-boot-scaffold-ingress
+  namespace: spring-boot-scaffold
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: spring-boot-scaffold-ingress
+    networking.gke.io/managed-certificates: spring-boot-scaffold-dev-cert
+    kubernetes.io/ingress.allow-http: "false"
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /*
+            backend:
+              serviceName: spring-boot-scaffold
+              servicePort: 80
+          - path: /gateway/*
+            backend:
+              serviceName: spring-boot-scaffold-gateway
+              servicePort: 80

@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spring-boot-scaffold-deployment
+  namespace: spring-boot-scaffold
+  labels:
+    app: spring-boot-scaffold
+    version: $VERSION-$CI_PIPELINE_ID
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spring-boot-scaffold
+  template:
+    metadata:
+      labels:
+        app: spring-boot-scaffold
+        version: $VERSION-$CI_PIPELINE_ID
+    spec:
+      containers:
+        - image: $IMAGE_NAME:$VERSION-$CI_PIPELINE_ID
+          name: spring-boot-scaffold-container
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1536Mi
+            requests:
+              cpu: 300m
+              memory: 512Mi
+          envFrom:
+            # common env variables
+            - configMapRef:
+                name: spring-boot-scaffold-config
+          env:
+            - name: REDIS_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: redis
+                  key: host
+            - name: REDIS_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: redis
+                  key: port
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spring-boot-scaffold
+spec:
+  selector:
+    app: spring-boot-scaffold
+    version: $VERSION-$CI_PIPELINE_ID
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 8080
+  type: NodePort

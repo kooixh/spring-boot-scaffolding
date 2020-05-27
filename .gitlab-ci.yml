@@ -1,0 +1,122 @@
+stages:
+  - build
+  - test
+  - quality gate
+  - publish
+  - promote
+
+variables:
+  VERSION: 0.0.1
+
+maven_build:
+  image: gcr.io/cloud-builders/mvn:3.5.0-jdk-8
+  stage: build
+  script:
+    - mvn compile
+  artifacts:
+    paths:
+      - target
+  only:
+    refs:
+      - merge_request
+
+maven_test:
+  image: gcr.io/cloud-builders/mvn:3.5.0-jdk-8
+  stage: test
+  script:
+    - echo $GCP_SA > $CI_PIPELINE_ID.json
+    - export GOOGLE_APPLICATION_CREDENTIALS=$CI_PIPELINE_ID.json
+    - mvn test
+  dependencies:
+    - maven_build
+  artifacts:
+    paths:
+      - target/jacoco.exec
+      - target/classes/
+      - target/generated-sources/
+      - target/maven-status/
+      - target/sunfire-reports/
+      - target/test-classes/
+      - target/generated-test-sources/
+  only:
+    refs:
+      - merge_request
+
+sonar_qube:
+  image: gcr.io/airasia-gitlab/sonar-scanner:latest
+  stage: quality gate
+  script:
+    - mvn sonar:sonar -Dsonar.host.url=$SQ_DOMAIN -Dsonar.login=$SQ_AUTH_TOKEN -Dsonar.projectKey=$SQ_PROJECT_KEY
+    - sleep 60 #waiting for soncar q to update project status
+    - check_status=$(curl -s -u $SQ_AUTH_TOKEN:'' $SQ_DOMAIN/api/qualitygates/project_status?projectKey=$SQ_PROJECT_KEY | jq -r '.projectStatus.status')
+    - if [[ $check_status == 'OK' ]]; then echo "SONARQ GATEWAY PASSED"; else echo "SONARQ GATEWAY FAILED";exit 1; fi
+  dependencies:
+    - maven_test
+  only:
+    refs:
+      - merge_request
+
+Build and Publish Docker Image:
+  variables:
+    IMAGE_NAME: gcr.io/kooixiuhong/spring-boot-scaffold
+  stage: publish
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  script:
+    - echo build docker
+    - export GOOGLE_APPLICATION_CREDENTIALS=$GCP_SERVICE_ACCOUNT
+    - /kaniko/executor --skip-tls-verify --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $IMAGE_NAME:$VERSION-$CI_PIPELINE_ID
+  only:
+    refs:
+      - merge_request
+  when: manual
+
+Promote to DEV:
+  variables:
+    IMAGE_NAME: gcr.io/kooixiuhong/spring-boot-scaffold
+    NAMESPACE: spring-boot-scaffold
+  image: gcr.io/cloud-builders/kubectl
+  stage: promote
+  script:
+    - echo deploy to dev
+    - apt-get update && apt-get install gettext-base -y
+    - gcloud auth activate-service-account --key-file $GCP_SERVICE_ACCOUNT
+    - gcloud container clusters get-credentials standard-cluster-1 --zone asia-southeast1-a --project kooixiuhong
+    - kubectl apply -f k8s/config/development.yml
+    - envsubst < k8s/base/deployment.yml | kubectl apply -n $NAMESPACE -f -
+  environment:
+    name: development
+  needs: 
+    - Build and Publish Docker Image
+  only:
+    refs:
+      - merge_request
+  when: manual
+
+Promote to STG:
+  variables:
+    IMAGE_NAME_DEV: gcr.io/kooixiuhong/spring-boot-scaffold
+    NAMESPACE: spring-boot-scaffold
+    IMAGE_NAME: gcr.io/kooixiuhong/spring-boot-scaffold
+  image: gcr.io/cloud-builders/kubectl
+  stage: promote 
+  script: 
+    - echo deploy to stg
+    - apt-get update && apt-get install gettext-base -y
+    - gcloud auth activate-service-account --key-file $GCP_SERVICE_ACCOUNT
+    - gcloud container images add-tag ${IMAGE_NAME_DEV}:${VERSION}-${CI_PIPELINE_ID} ${IMAGE_NAME}:${VERSION}-${CI_PIPELINE_ID} --quiet
+    - apt-get update && apt-get install gettext-base -y
+    - gcloud container clusters get-credentials gke-tfstg-qeoe --zone asia-southeast1-a --project kooixiuhong
+    - kubectl apply -f k8s/config/staging.yml
+    - envsubst < k8s/base/deployment.yml | kubectl apply -n $NAMESPACE -f -
+  environment:
+    name: staging
+  needs:
+    - Build and Publish Docker Image
+  only:
+    refs:
+      - merge_requests
+  when: manual
+
+
